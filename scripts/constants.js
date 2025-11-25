@@ -1,0 +1,13 @@
+export const COOKIE_NAME = 'emoji_dm_auth';
+export const COOKIE_MAX_AGE_DAYS = 14;
+export const PROFILE_STORAGE_KEY = 'emoji_dm_profile';
+export const PEER_STORAGE_KEY = 'emoji_dm_peers';
+export const DM_STORAGE_KEY = 'emoji_dm_mock_messages';
+export const GLOBAL_STORAGE_KEY = 'emoji_dm_global_messages';
+export const MESSAGE_TTL_MS = 24 * 60 * 60 * 1000;
+export const MESSAGE_MAX_EMOJI = 20;
+export const DM_MAX_CHARS = 400;
+export const POLL_INTERVAL_MS = 5000;
+export const PASSWORD_HASH = '294763754a8efd4c739d9f679bfca3ab510106f42ddb5dc0216ba8bc98ba3158';
+export const GAS_MESSAGES_ENDPOINT = 'https://script.google.com/macros/s/AKfycbza2Ra6QNMdIpLGZaJrlZS_DE9YxYUqbsZ0oPAJUavb6eZ2sM-Vqzq5WONGW46e_KBe/exec';
+export const GLOBAL_CHANNEL = 'global';
