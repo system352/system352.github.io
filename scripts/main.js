@@ -24,6 +24,41 @@ const app = document.querySelector('#app');
 const query = new URLSearchParams(window.location.search);
 const initialPeer = query.get('peer_id');
 
+function randomHeroEmojis() {
+  const count = Math.floor(Math.random() * 3) + 4; // 4-6 emojis
+  const selections = [];
+  for (let i = 0; i < count; i += 1) {
+    const pick = EMOJI_PALETTE[Math.floor(Math.random() * EMOJI_PALETTE.length)];
+    selections.push(pick);
+  }
+  return selections.join('');
+}
+
+function areMessagesEqual(currentMessages, nextMessages) {
+  if (!Array.isArray(currentMessages) || !Array.isArray(nextMessages)) {
+    return false;
+  }
+  if (currentMessages.length !== nextMessages.length) {
+    return false;
+  }
+  for (let i = 0; i < currentMessages.length; i += 1) {
+    const current = currentMessages[i];
+    const next = nextMessages[i];
+    if (
+      !next ||
+      current.id !== next.id ||
+      current.sender_id !== next.sender_id ||
+      current.receiver_id !== next.receiver_id ||
+      current.content !== next.content ||
+      current.created_at !== next.created_at ||
+      (current.channel || 'dm') !== (next.channel || 'dm')
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 const state = {
   authenticated: false,
   profile: loadProfile(),
@@ -46,6 +81,7 @@ const state = {
   dmComposerError: '',
   dmComposerTouched: false,
   dmSending: false,
+  heroTitleEmojis: randomHeroEmojis(),
 };
 
 let dmPollerId = null;
@@ -114,8 +150,20 @@ async function loadConversation(peerId, { silent = false } = {}) {
   try {
     const messages = await fetchConversation(state.profile.userId, peerId);
     syncPeersFromMessages(state.profile.userId, messages);
-    setState({ dmMessages: messages, dmStatus: 'ready', dmError: '' });
-    scrollConversationToEnd('[data-dm-conversation]');
+    const updates = {};
+    if (state.dmStatus !== 'ready' || state.dmError) {
+      updates.dmStatus = 'ready';
+      updates.dmError = '';
+    }
+    if (!areMessagesEqual(state.dmMessages, messages)) {
+      updates.dmMessages = messages;
+    }
+    if (Object.keys(updates).length > 0) {
+      setState(updates);
+      if (updates.dmMessages) {
+        scrollConversationToEnd('[data-dm-conversation]');
+      }
+    }
   } catch (error) {
     setState({ dmStatus: 'error', dmError: error.message || 'メッセージ取得に失敗しました' });
   }
@@ -127,8 +175,20 @@ async function loadGlobalFeed({ silent = false } = {}) {
   }
   try {
     const messages = await fetchGlobalFeed();
-    setState({ globalMessages: messages, globalStatus: 'ready', globalError: '' });
-    scrollConversationToEnd('[data-global-conversation]');
+    const updates = {};
+    if (state.globalStatus !== 'ready' || state.globalError) {
+      updates.globalStatus = 'ready';
+      updates.globalError = '';
+    }
+    if (!areMessagesEqual(state.globalMessages, messages)) {
+      updates.globalMessages = messages;
+    }
+    if (Object.keys(updates).length > 0) {
+      setState(updates);
+      if (updates.globalMessages) {
+        scrollConversationToEnd('[data-global-conversation]');
+      }
+    }
   } catch (error) {
     setState({ globalStatus: 'error', globalError: error.message || '全体チャットの取得に失敗しました' });
   }
@@ -371,22 +431,37 @@ async function handleGlobalSend(form) {
   if (error) {
     return;
   }
-  setState({ globalSending: true, globalComposerError: '', globalComposerTouched: true });
+  const optimisticMessage = {
+    id: `optimistic-global-${Date.now()}`,
+    sender_id: state.profile.userId,
+    receiver_id: GLOBAL_CHANNEL,
+    content: message,
+    created_at: new Date().toISOString(),
+    channel: GLOBAL_CHANNEL,
+  };
+  setState({
+    globalSending: true,
+    globalComposerError: '',
+    globalComposerTouched: true,
+    globalComposerValue: '',
+    globalMessages: [...state.globalMessages, optimisticMessage],
+  });
+  scrollConversationToEnd('[data-global-conversation]');
   try {
     await sendGlobalMessage({ sender_id: state.profile.userId, content: message });
     setState({
-      globalComposerValue: '',
       globalSending: false,
       globalComposerError: '',
       globalComposerTouched: false,
     });
     await loadGlobalFeed({ silent: true });
-    scrollConversationToEnd('[data-global-conversation]');
   } catch (err) {
     setState({
       globalComposerError: err.message || '送信に失敗しました',
       globalSending: false,
       globalComposerTouched: true,
+      globalComposerValue: message,
+      globalMessages: state.globalMessages.filter((msg) => msg.id !== optimisticMessage.id),
     });
   }
 }
@@ -402,7 +477,22 @@ async function handleDmSend(form) {
   if (error) {
     return;
   }
-  setState({ dmSending: true, dmComposerError: '', dmComposerTouched: true });
+  const optimisticMessage = {
+    id: `optimistic-dm-${Date.now()}`,
+    sender_id: state.profile.userId,
+    receiver_id: state.currentPeerId,
+    content: message,
+    created_at: new Date().toISOString(),
+    channel: 'dm',
+  };
+  setState({
+    dmSending: true,
+    dmComposerError: '',
+    dmComposerTouched: true,
+    dmComposerValue: '',
+    dmMessages: [...state.dmMessages, optimisticMessage],
+  });
+  scrollConversationToEnd('[data-dm-conversation]');
   try {
     await sendMessage({
       sender_id: state.profile.userId,
@@ -410,18 +500,18 @@ async function handleDmSend(form) {
       content: message,
     });
     setState({
-      dmComposerValue: '',
       dmSending: false,
       dmComposerError: '',
       dmComposerTouched: false,
     });
     await loadConversation(state.currentPeerId, { silent: true });
-    scrollConversationToEnd('[data-dm-conversation]');
   } catch (err) {
     setState({
       dmComposerError: err.message || '送信に失敗しました',
       dmSending: false,
       dmComposerTouched: true,
+      dmComposerValue: message,
+      dmMessages: state.dmMessages.filter((msg) => msg.id !== optimisticMessage.id),
     });
   }
 }
@@ -458,7 +548,7 @@ function renderHeader() {
   return `
     <header class="hero">
       <p class="hero-label">emoji lounge</p>
-      <h1 class="hero-title">全体チャットで絵文字を共有、DMで深掘り</h1>
+      <h1 class="hero-title">${state.heroTitleEmojis} 全体チャットで絵文字を共有、DMで深掘り</h1>
       <p class="hero-subtitle">
         合言葉で入室し、ロビーでは絵文字のみ。DMに切り替えると文章でも相談できます。
       </p>
@@ -639,7 +729,7 @@ function renderGlobalView() {
           ${renderEmojiPalette('global')}
         </label>
         <button type="submit" class="primary" ${sendDisabled ? 'disabled' : ''}>
-          ${state.globalSending ? '送信中…' : '投稿'}
+          投稿
         </button>
       </form>
       ${renderComposerError('global')}
@@ -678,7 +768,7 @@ function renderChatView() {
           ${renderEmojiPalette('dm')}
         </label>
         <button type="submit" class="primary" ${sendDisabled ? 'disabled' : ''}>
-          ${state.dmSending ? '送信中…' : '送信'}
+          送信
         </button>
       </form>
       ${renderComposerError('dm')}
