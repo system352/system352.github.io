@@ -72,6 +72,7 @@ export async function fetchConversation(userId, peerId) {
     appendSharedPass(url);
     const response = await fetch(url.toString(), {
       method: 'GET',
+      headers: { 'Content-Type': 'text/plain' },
       // CORS は GAS 側のレスポンスヘッダーで許可されるため、
       // GET では余計なリクエストヘッダーを付けない。
       mode: 'cors',
