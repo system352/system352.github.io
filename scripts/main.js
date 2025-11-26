@@ -9,6 +9,7 @@ import {
   MESSAGE_MAX_EMOJI,
   PASSWORD_HASH,
   POLL_INTERVAL_MS,
+  EMOJI_PALETTE,
 } from './constants.js';
 import { loadProfile } from './state/profile.js';
 import { listPeers, rememberPeer, syncPeersFromMessages } from './state/peers.js';
@@ -36,12 +37,14 @@ const state = {
   globalError: '',
   globalComposerValue: '',
   globalComposerError: '',
+  globalComposerTouched: false,
   globalSending: false,
   dmMessages: [],
   dmStatus: 'idle',
   dmError: '',
   dmComposerValue: '',
   dmComposerError: '',
+  dmComposerTouched: false,
   dmSending: false,
 };
 
@@ -180,6 +183,8 @@ function handleLogout() {
     globalComposerValue: '',
     dmComposerValue: '',
     globalComposerError: '',
+    globalComposerTouched: false,
+    dmComposerTouched: false,
     dmComposerError: '',
   });
 }
@@ -216,6 +221,7 @@ function goHome() {
     currentPeerId: null,
     dmMessages: [],
     dmComposerValue: '',
+    dmComposerTouched: false,
     dmComposerError: '',
   });
 }
@@ -229,6 +235,7 @@ function enterChat(peerId) {
     tab: 'dm',
     dmMessages: [],
     dmComposerValue: '',
+    dmComposerTouched: false,
     dmComposerError: '',
   });
   loadConversation(peerId);
@@ -258,46 +265,164 @@ function validateDmComposer(value) {
   return '';
 }
 
+function getComposerKeys(scope) {
+  if (scope === 'global') {
+    return {
+      valueKey: 'globalComposerValue',
+      errorKey: 'globalComposerError',
+      touchedKey: 'globalComposerTouched',
+      sendingKey: 'globalSending',
+      formSelector: '[data-global-form]',
+      inputSelector: '[data-global-input]',
+    };
+  }
+  return {
+    valueKey: 'dmComposerValue',
+    errorKey: 'dmComposerError',
+    touchedKey: 'dmComposerTouched',
+    sendingKey: 'dmSending',
+    formSelector: '[data-dm-form]',
+    inputSelector: '[data-dm-input]',
+  };
+}
+
+function renderEmojiPalette(scope) {
+  return `
+    <div class="emoji-palette" data-emoji-palette="${scope}">
+      <p class="emoji-palette__label">絵文字パレット</p>
+      <div class="emoji-palette__grid">
+        ${EMOJI_PALETTE.map(
+          (emoji) =>
+            `<button type="button" class="emoji-chip" data-emoji="${emoji}" aria-label="${emoji} を挿入">${emoji}</button>`,
+        ).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderComposerError(scope) {
+  const { errorKey } = getComposerKeys(scope);
+  const message = state[errorKey] || '';
+  const hiddenClass = message ? '' : ' is-hidden';
+  return `<p class="error${hiddenClass}" data-${scope}-error aria-live="polite">${message}</p>`;
+}
+
+function syncComposerUI(scope, inputEl) {
+  const { valueKey, errorKey, sendingKey, formSelector } = getComposerKeys(scope);
+  const error = state[errorKey] || '';
+  const value = state[valueKey] || '';
+  const form = app.querySelector(formSelector);
+  const submitButton = form ? form.querySelector('button[type="submit"]') : null;
+  if (submitButton) {
+    submitButton.disabled = Boolean(error) || !value || state[sendingKey];
+  }
+  const errorEl = app.querySelector(`[data-${scope}-error]`);
+  if (errorEl) {
+    errorEl.textContent = messageOrSpace(error);
+    errorEl.classList.toggle('is-hidden', !error);
+  }
+  if (inputEl) {
+    if (error) {
+      inputEl.setAttribute('aria-invalid', 'true');
+    } else {
+      inputEl.removeAttribute('aria-invalid');
+    }
+  }
+}
+
+function messageOrSpace(text) {
+  return text || ' ';
+}
+
+function validateComposer(scope, value) {
+  return scope === 'global' ? validateGlobalComposer(value) : validateDmComposer(value);
+}
+
+function bindEmojiPalette(scope) {
+  const keys = getComposerKeys(scope);
+  const palette = app.querySelector(`[data-emoji-palette="${scope}"]`);
+  const form = app.querySelector(keys.formSelector);
+  const input = form ? form.querySelector(keys.inputSelector) : null;
+  if (!palette || !input) return;
+  palette.addEventListener('click', (event) => {
+    const emojiButton = event.target.closest('[data-emoji]');
+    if (!emojiButton) return;
+    const emoji = emojiButton.getAttribute('data-emoji');
+    if (!emoji) return;
+    const newValue = `${input.value || ''}${emoji}`;
+    state[keys.valueKey] = newValue;
+    input.value = newValue;
+    if (state[keys.touchedKey]) {
+      state[keys.errorKey] = validateComposer(scope, newValue);
+    }
+    syncComposerUI(scope, input);
+    input.focus();
+  });
+}
+
 async function handleGlobalSend(form) {
-  const message = state.globalComposerValue;
+  const input = form.querySelector('[data-global-input]');
+  const message = input ? input.value : state.globalComposerValue;
+  state.globalComposerValue = message;
+  state.globalComposerTouched = true;
   const error = validateGlobalComposer(message);
+  state.globalComposerError = error;
+  syncComposerUI('global', input);
   if (error) {
-    setState({ globalComposerError: error });
     return;
   }
-  setState({ globalSending: true, globalComposerError: '' });
+  setState({ globalSending: true, globalComposerError: '', globalComposerTouched: true });
   try {
     await sendGlobalMessage({ sender_id: state.profile.userId, content: message });
-    setState({ globalComposerValue: '', globalSending: false });
+    setState({
+      globalComposerValue: '',
+      globalSending: false,
+      globalComposerError: '',
+      globalComposerTouched: false,
+    });
     await loadGlobalFeed({ silent: true });
     scrollConversationToEnd('[data-global-conversation]');
   } catch (err) {
     setState({
       globalComposerError: err.message || '送信に失敗しました',
       globalSending: false,
+      globalComposerTouched: true,
     });
   }
 }
 
 async function handleDmSend(form) {
-  const message = state.dmComposerValue;
+  const input = form.querySelector('[data-dm-input]');
+  const message = input ? input.value : state.dmComposerValue;
+  state.dmComposerValue = message;
+  state.dmComposerTouched = true;
   const error = validateDmComposer(message);
+  state.dmComposerError = error;
+  syncComposerUI('dm', input);
   if (error) {
-    setState({ dmComposerError: error });
     return;
   }
-  setState({ dmSending: true, dmComposerError: '' });
+  setState({ dmSending: true, dmComposerError: '', dmComposerTouched: true });
   try {
     await sendMessage({
       sender_id: state.profile.userId,
       receiver_id: state.currentPeerId,
       content: message,
     });
-    setState({ dmComposerValue: '', dmSending: false });
+    setState({
+      dmComposerValue: '',
+      dmSending: false,
+      dmComposerError: '',
+      dmComposerTouched: false,
+    });
     await loadConversation(state.currentPeerId, { silent: true });
     scrollConversationToEnd('[data-dm-conversation]');
   } catch (err) {
-    setState({ dmComposerError: err.message || '送信に失敗しました', dmSending: false });
+    setState({
+      dmComposerError: err.message || '送信に失敗しました',
+      dmSending: false,
+      dmComposerTouched: true,
+    });
   }
 }
 
@@ -511,12 +636,13 @@ function renderGlobalView() {
             value="${state.globalComposerValue}"
             autocomplete="off"
           />
+          ${renderEmojiPalette('global')}
         </label>
         <button type="submit" class="primary" ${sendDisabled ? 'disabled' : ''}>
           ${state.globalSending ? '送信中…' : '投稿'}
         </button>
       </form>
-      ${state.globalComposerError ? `<p class="error">${state.globalComposerError}</p>` : ''}
+      ${renderComposerError('global')}
     </section>
   `;
 }
@@ -549,12 +675,13 @@ function renderChatView() {
             rows="2"
             autocomplete="off"
           >${state.dmComposerValue}</textarea>
+          ${renderEmojiPalette('dm')}
         </label>
         <button type="submit" class="primary" ${sendDisabled ? 'disabled' : ''}>
           ${state.dmSending ? '送信中…' : '送信'}
         </button>
       </form>
-      ${state.dmComposerError ? `<p class="error">${state.dmComposerError}</p>` : ''}
+      ${renderComposerError('dm')}
     </section>
   `;
 }
@@ -612,21 +739,22 @@ function bindEvents() {
     const input = dmForm.querySelector('[data-dm-input]');
     input.addEventListener('input', () => {
       const value = input.value;
-      const error = value ? validateDmComposer(value) : '';
       state.dmComposerValue = value;
-      state.dmComposerError = error;
-      const submitButton = dmForm.querySelector('button[type="submit"]');
-      submitButton.disabled = Boolean(error) || !value || state.dmSending;
-      if (error) {
-        input.setAttribute('aria-invalid', 'true');
-      } else {
-        input.removeAttribute('aria-invalid');
+      if (state.dmComposerTouched) {
+        state.dmComposerError = validateDmComposer(value);
       }
+      syncComposerUI('dm', input);
+    });
+    input.addEventListener('blur', () => {
+      state.dmComposerTouched = true;
+      state.dmComposerError = validateDmComposer(input.value);
+      syncComposerUI('dm', input);
     });
     dmForm.addEventListener('submit', (event) => {
       event.preventDefault();
       handleDmSend(dmForm);
     });
+    bindEmojiPalette('dm');
   }
 
   const globalForm = app.querySelector('[data-global-form]');
@@ -634,21 +762,22 @@ function bindEvents() {
     const input = globalForm.querySelector('[data-global-input]');
     input.addEventListener('input', () => {
       const value = input.value;
-      const error = validateGlobalComposer(value);
       state.globalComposerValue = value;
-      state.globalComposerError = error;
-      const submitButton = globalForm.querySelector('button[type="submit"]');
-      submitButton.disabled = Boolean(error) || !value || state.globalSending;
-      if (error) {
-        input.setAttribute('aria-invalid', 'true');
-      } else {
-        input.removeAttribute('aria-invalid');
+      if (state.globalComposerTouched) {
+        state.globalComposerError = validateGlobalComposer(value);
       }
+      syncComposerUI('global', input);
+    });
+    input.addEventListener('blur', () => {
+      state.globalComposerTouched = true;
+      state.globalComposerError = validateGlobalComposer(input.value);
+      syncComposerUI('global', input);
     });
     globalForm.addEventListener('submit', (event) => {
       event.preventDefault();
       handleGlobalSend(globalForm);
     });
+    bindEmojiPalette('global');
   }
 
   const tabButtons = app.querySelectorAll('[data-tab]');

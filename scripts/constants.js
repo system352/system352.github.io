@@ -11,3 +11,25 @@ export const POLL_INTERVAL_MS = 5000;
 export const PASSWORD_HASH = '294763754a8efd4c739d9f679bfca3ab510106f42ddb5dc0216ba8bc98ba3158';
 export const GAS_MESSAGES_ENDPOINT = 'https://script.google.com/macros/s/AKfycbza2Ra6QNMdIpLGZaJrlZS_DE9YxYUqbsZ0oPAJUavb6eZ2sM-Vqzq5WONGW46e_KBe/exec';
 export const GLOBAL_CHANNEL = 'global';
+export const EMOJI_PALETTE = [
+  '😀',
+  '😁',
+  '😂',
+  '🤣',
+  '😊',
+  '😍',
+  '🥰',
+  '😎',
+  '🤔',
+  '🙌',
+  '🙏',
+  '👍',
+  '🔥',
+  '🎉',
+  '🌈',
+  '✨',
+  '🌟',
+  '💡',
+  '☕️',
+  '💬',
+];
