@@ -25,7 +25,7 @@ const query = new URLSearchParams(window.location.search);
 const initialPeer = query.get('peer_id');
 
 function randomHeroEmojis() {
-  const count = Math.floor(Math.random() * 3) + 4; // 4-6 emojis
+  const count = Math.floor(Math.random() * 3) + 6; // 4-6 emojis
   const selections = [];
   for (let i = 0; i < count; i += 1) {
     const pick = EMOJI_PALETTE[Math.floor(Math.random() * EMOJI_PALETTE.length)];
@@ -548,7 +548,7 @@ function renderHeader() {
   return `
     <header class="hero">
       <p class="hero-label">emoji lounge</p>
-      <h1 class="hero-title">${state.heroTitleEmojis} 全体チャットで絵文字を共有、DMで深掘り</h1>
+      <h1 class="hero-title">${state.heroTitleEmojis}</h1>
       <p class="hero-subtitle">
         合言葉で入室し、ロビーでは絵文字のみ。DMに切り替えると文章でも相談できます。
       </p>
