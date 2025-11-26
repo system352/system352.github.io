@@ -360,6 +360,37 @@ body {
   flex: 1;
 }
 
+.emoji-palette {
+  margin-top: 0.5rem;
+}
+
+.emoji-palette__label {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.emoji-palette__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.emoji-chip {
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 12px;
+  padding: 0.35rem 0.6rem;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.emoji-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
 .status {
   margin: 0;
   font-size: 0.9rem;
@@ -369,6 +400,10 @@ body {
 .error {
   color: #b91c1c;
   margin: 0;
+}
+
+.error.is-hidden {
+  display: none;
 }
 
 @media (max-width: 768px) {

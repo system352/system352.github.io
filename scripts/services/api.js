@@ -5,11 +5,13 @@ import {
   GLOBAL_STORAGE_KEY,
   MESSAGE_MAX_EMOJI,
   MESSAGE_TTL_MS,
+  PASSWORD_HASH,
 } from '../constants.js';
 import { rememberPeer } from '../state/peers.js';
 import { countGraphemes, isEmojiOnly } from '../logic/emoji-guards.js';
 
 const hasRemoteEndpoint = Boolean(GAS_MESSAGES_ENDPOINT);
+const sharedPassPayload = PASSWORD_HASH ? { shared_pass_hash: PASSWORD_HASH } : {};
 
 function readLocalMessages(storageKey) {
   try {
@@ -56,15 +58,23 @@ function normalizeMessage(message) {
   };
 }
 
+function appendSharedPass(url) {
+  if (!PASSWORD_HASH) return;
+  url.searchParams.set('shared_pass_hash', PASSWORD_HASH);
+}
+
 export async function fetchConversation(userId, peerId) {
   if (!peerId) return [];
   if (hasRemoteEndpoint) {
     const url = new URL(GAS_MESSAGES_ENDPOINT);
     url.searchParams.set('user_id', userId);
     url.searchParams.set('peer_id', peerId);
+    appendSharedPass(url);
     const response = await fetch(url.toString(), {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      // CORS は GAS 側のレスポンスヘッダーで許可されるため、
+      // GET では余計なリクエストヘッダーを付けない。
+      mode: 'cors',
     });
     if (!response.ok) {
       throw new Error('メッセージ取得に失敗しました');
@@ -101,7 +111,8 @@ export async function sendMessage({ sender_id, receiver_id, content }) {
     const response = await fetch(GAS_MESSAGES_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sender_id, receiver_id, content }),
+      mode: 'cors',
+      body: JSON.stringify({ sender_id, receiver_id, content, ...sharedPassPayload }),
     });
     if (!response.ok) {
       throw new Error('メッセージ送信に失敗しました');
@@ -130,9 +141,12 @@ export async function fetchGlobalFeed() {
   if (hasRemoteEndpoint) {
     const url = new URL(GAS_MESSAGES_ENDPOINT);
     url.searchParams.set('channel', GLOBAL_CHANNEL);
+    appendSharedPass(url);
     const response = await fetch(url.toString(), {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      // CORS は GAS 側のレスポンスヘッダーで許可されるため、
+      // GET では余計なリクエストヘッダーを付けない。
+      mode: 'cors',
     });
     if (!response.ok) {
       throw new Error('全体チャットの取得に失敗しました');
@@ -166,7 +180,8 @@ export async function sendGlobalMessage({ sender_id, content }) {
     const response = await fetch(GAS_MESSAGES_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sender_id, content, channel: GLOBAL_CHANNEL }),
+      mode: 'cors',
+      body: JSON.stringify({ sender_id, content, channel: GLOBAL_CHANNEL, ...sharedPassPayload }),
     });
     if (!response.ok) {
       throw new Error('全体チャットの送信に失敗しました');
